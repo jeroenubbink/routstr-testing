@@ -1,0 +1,201 @@
+services:
+
+  # ── Infrastructure ────────────────────────────────────────────────────────
+
+  relay:
+    image: scsibug/nostr-rs-relay:latest
+    ports:
+      - "7777:8080"
+    volumes:
+      - relay-data:/usr/src/app/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8080"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  mock-openai:
+    image: zerob13/mock-openai-api
+    ports:
+      - "8083:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/v1/models"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # ── Routstr nodes ─────────────────────────────────────────────────────────
+
+  node-a:
+    build:
+      context: vendor/routstr-core
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////data/node-a.db
+      - RELAYS=ws://relay:8080
+      # UPSTREAM_* default to the in-compose mock-openai (upstream_profile=mock).
+      # For a real provider the orchestrator (ROU-153) exports these before
+      # `docker compose up`, pointing node-a at the live upstream + catalog.
+      - UPSTREAM_BASE_URL=${UPSTREAM_BASE_URL:-http://mock-openai:3000}
+      - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-test-key}
+      - MODELS_PATH=${UPSTREAM_MODELS_PATH:-models.json}
+      - CASHU_MINTS=${CASHU_MINTS:-https://testnut.cashu.space}
+      # OpenRouter upstream — node auto-seeds an openrouter provider row when
+      # OPENROUTER_API_KEY is present at startup (default provider_fee 1.01).
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_REFERER=${OPENROUTER_REFERER:-https://routstr-testing.local}
+      - ADMIN_PASSWORD=${NODE_A_ADMIN_PASSWORD:-test-admin-pw}
+      - NAME=NodeA
+      - DESCRIPTION=Test node A
+      - NPUB=${NODE_A_NPUB:-npub10xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqpkge6d}
+      - NSEC=${NODE_A_NSEC:-nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsmhltgl}
+      - HTTP_URL=http://node-a:8000
+      - CORS_ORIGINS=*
+      - FIXED_COST_PER_REQUEST=1
+      - FIXED_PER_1K_INPUT_TOKENS=10
+      - FIXED_PER_1K_OUTPUT_TOKENS=30
+      - FIXED_PRICING=false
+      - REFUND_PROCESSING_INTERVAL=3600
+      - MINIMUM_PAYOUT=1000
+      - PAYOUT_INTERVAL=86400
+    volumes:
+      - node-a-data:/data
+      # Real-upstream model catalogs (ROU-153), mounted read-only. The
+      # orchestrator sets MODELS_PATH=/providers-models/<provider>.json for a
+      # real upstream_profile; for `mock` MODELS_PATH stays at the image default.
+      - ./providers/models:/providers-models:ro
+    depends_on:
+      relay:
+        condition: service_healthy
+      mock-openai:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/info').status==200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  node-b:
+    build:
+      context: vendor/routstr-core
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////data/node-b.db
+      - RELAYS=ws://relay:8080
+      - UPSTREAM_BASE_URL=${UPSTREAM_BASE_URL:-http://mock-openai:3000}
+      - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-test-key}
+      - MODELS_PATH=${UPSTREAM_MODELS_PATH:-models.json}
+      - CASHU_MINTS=${CASHU_MINTS:-https://testnut.cashu.space}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_REFERER=${OPENROUTER_REFERER:-https://routstr-testing.local}
+      - ADMIN_PASSWORD=${NODE_B_ADMIN_PASSWORD:-test-admin-pw}
+      - NAME=NodeB
+      - DESCRIPTION=Test node B
+      - NPUB=${NODE_B_NPUB:-npub1ccz8l9zpa47k6vz9gphftsrumpw80rjt3nhnefat4symjhrsnmjs38mnyd}
+      - NSEC=${NODE_B_NSEC:-nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpqptcfk2}
+      - HTTP_URL=http://node-b:8000
+      - CORS_ORIGINS=*
+      - FIXED_COST_PER_REQUEST=2
+      - FIXED_PER_1K_INPUT_TOKENS=15
+      - FIXED_PER_1K_OUTPUT_TOKENS=40
+      - FIXED_PRICING=false
+      - REFUND_PROCESSING_INTERVAL=3600
+      - MINIMUM_PAYOUT=1000
+      - PAYOUT_INTERVAL=86400
+    volumes:
+      - node-b-data:/data
+      - ./providers/models:/providers-models:ro
+    depends_on:
+      relay:
+        condition: service_healthy
+      mock-openai:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/info').status==200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # ── Routstrd daemon ───────────────────────────────────────────────────────
+
+  routstrd:
+    build:
+      context: vendor/routstrd
+      dockerfile: ../../vendor-dockerfiles/routstrd.Dockerfile
+    ports:
+      - "8091:8008"
+    environment:
+      - RELAY_URL=ws://relay:8080
+    # No --provider: that flag pins deps.provider as the default forcedProvider
+    # for every request, bypassing price-based discovery. Omitting it lets
+    # routstrd discover both nodes via the relay and route to the cheapest
+    # (lowest provider_fee) provider that serves the requested model.
+    command:
+      - "sh"
+      - "-c"
+      - "bun run dist/daemon/index.js --port 8008"
+    depends_on:
+      relay:
+        condition: service_healthy
+      node-a:
+        condition: service_healthy
+      node-b:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/8008"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+
+  # ── Web UI (Vite + React) ─────────────────────────────────────────────────
+  #
+  # The FastAPI backend (`server/`) is not part of the compose stack — it
+  # runs on the host (`uvicorn server.main:app --port 8000`). The webui
+  # container reaches it through host.docker.internal, which Docker maps
+  # to the host's gateway via the explicit extra_hosts entry below.
+
+  webui:
+    build:
+      context: ./webui
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://host.docker.internal:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ── CLI runner (long-lived for docker exec) ───────────────────────────────
+
+  cli-runner:
+    build:
+      context: vendor/routstr-cli
+      dockerfile: ../../vendor-dockerfiles/routstr-cli.Dockerfile
+    environment:
+      - ROUTSTRD_URL=http://routstrd:8008
+      - E2E_CASHU_TOKEN=${E2E_CASHU_TOKEN:-}
+    depends_on:
+      routstrd:
+        condition: service_healthy
+    volumes:
+      - ./tests:/tests
+    command: ["tail", "-f", "/dev/null"]
+    restart: unless-stopped
+
+volumes:
+  relay-data:
+  node-a-data:
+  node-b-data:

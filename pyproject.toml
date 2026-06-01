@@ -1,0 +1,31 @@
+[project]
+name = "routstr-testing"
+version = "0.1.0"
+description = "End-to-end test harness for the Routstr stack."
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "sqlmodel>=0.0.24",
+    "pyyaml>=6.0",
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+]
+
+[tool.setuptools]
+packages = ["runner", "server", "tests"]
+
+[tool.pytest.ini_options]
+markers = [
+    "requires_funded_daemon: test depends on a topped-up routstrd",
+    "safe_for_remote: read-only / non-mutating against a routstr node; safe to point at someone else's deployment",
+    "destructive: mutates routstr node state (refund, topup, child-key creation, payouts); only runs against TARGET_PROFILE=local",
+    "admin_required: needs a valid admin token; auto-skipped under TARGET_PROFILE=remote when REMOTE_NODE_ADMIN_TOKEN_<i> is not provided",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+filterwarnings = [
+    "ignore::pytest.PytestCollectionWarning",
+]
