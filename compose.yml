@@ -26,6 +26,45 @@ services:
       timeout: 3s
       retries: 12
 
+  # Real Cashu mints (nutshell) with the FakeWallet Lightning backend: they
+  # issue protocol-valid ecash backed by *fake* Lightning, so swaps run with
+  # real crypto and zero real sats. The "foreign" mint issues tokens that get
+  # swapped to a node's "primary" mint, exercising swap_to_primary_mint.
+  # MINT_PRIVATE_KEY is fixed per-mint so keysets stay stable across restarts.
+  foreign-mint:
+    image: cashubtc/nutshell:latest
+    ports:
+      - "3338:3338"
+    environment:
+      - MINT_BACKEND_BOLT11_SAT=FakeWallet
+      - MINT_LISTEN_HOST=0.0.0.0
+      - MINT_LISTEN_PORT=3338
+      - MINT_PRIVATE_KEY=routstr-testing-foreign-mint-fixed-key
+    command: ["python", "-m", "cashu.mint"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3338/v1/info').status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  primary-mint:
+    image: cashubtc/nutshell:latest
+    ports:
+      - "3339:3338"
+    environment:
+      - MINT_BACKEND_BOLT11_SAT=FakeWallet
+      - MINT_LISTEN_HOST=0.0.0.0
+      - MINT_LISTEN_PORT=3338
+      - MINT_PRIVATE_KEY=routstr-testing-primary-mint-fixed-key
+    command: ["python", "-m", "cashu.mint"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3338/v1/info').status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   # ── Routstr nodes ─────────────────────────────────────────────────────────
 
   node-a:

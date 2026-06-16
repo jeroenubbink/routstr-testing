@@ -1,0 +1,26 @@
+id: swap_foreign_mint
+name: Foreign-mint swap on wallet topup
+description: >
+  Exercises routstr-core's swap_to_primary_mint end to end: a Cashu token issued
+  by an UNtrusted mint (foreign-mint) is topped up via POST /v1/wallet/topup, and
+  the node swaps it to its trusted primary mint (mint-quote on primary -> melt
+  foreign proofs to pay it -> mint on primary). Uses two local nutshell FakeWallet
+  mints, so it runs with real Cashu crypto and zero real sats. The credited msats
+  are strictly less than the token's face value (melt fee + input fees), proving
+  the swap actually ran rather than a trusted same-mint redeem.
+
+# Stack is brought up out-of-band (`make up`); the orchestrator only runs pytest
+# against it. The node must trust ONLY the primary mint for the swap to trigger.
+services_required: false
+target_profile: local
+upstream_profile: mock
+
+selection:
+  paths:
+    - tests/integration/test_swap_foreign_mint.py
+  markers:
+    - destructive
+
+expected_cost_sats: 0
+estimated_upstream_cost_usd: 0.0
+timeout_seconds: 180
