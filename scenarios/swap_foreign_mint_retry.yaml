@@ -1,0 +1,28 @@
+id: swap_foreign_mint_retry
+name: Foreign-mint swap retry on melt failure
+description: >
+  Drives routstr-core's swap_to_primary_mint retry loop (PR #549) over the real
+  wire. A foreign-mint token is topped up via POST /v1/wallet/topup, but the
+  fault-proxy in front of the issuing mint fails the first NUT-05 melt-execute
+  with the verbatim issue-#468 "not enough inputs" error. The melt never reaches
+  the mint, so the proofs stay unspent and a node that retries can re-melt them
+  and credit the swapped amount. The proxy's /__proxy__/stats confirms >= 2 melt
+  attempts. Without the retry (e.g. routstr-core main) the first failure aborts
+  the swap and the topup returns 400. Uses local nutshell FakeWallet mints — real
+  Cashu crypto, zero real sats.
+
+# Stack is brought up out-of-band (`make up`); the orchestrator only runs pytest
+# against it. The node must trust ONLY the primary mint for the swap to trigger.
+services_required: false
+target_profile: local
+upstream_profile: mock
+
+selection:
+  paths:
+    - tests/integration/test_swap_foreign_mint_retry.py
+  markers:
+    - destructive
+
+expected_cost_sats: 0
+estimated_upstream_cost_usd: 0.0
+timeout_seconds: 180

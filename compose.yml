@@ -65,6 +65,52 @@ services:
       timeout: 3s
       retries: 12
 
+  # Dedicated backing mint for the fault-proxy (Phase 2). Kept separate from
+  # foreign-mint with its own key so it has a DISTINCT keyset: the node derives
+  # blinded secrets per keyset, so a separate keyset prevents collisions with
+  # Phase 1's foreign-mint proofs ("outputs already signed" / code 11003) when
+  # both phases run against the same node.
+  fault-mint:
+    image: cashubtc/nutshell:latest
+    ports:
+      - "3341:3338"
+    environment:
+      - MINT_BACKEND_BOLT11_SAT=FakeWallet
+      - MINT_LISTEN_HOST=0.0.0.0
+      - MINT_LISTEN_PORT=3338
+      - MINT_PRIVATE_KEY=routstr-testing-fault-mint-fixed-key
+    command: ["python", "-m", "cashu.mint"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3338/v1/info').status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Fault-injecting reverse proxy in front of fault-mint (Phase 2): forwards
+  # everything except the NUT-05 melt-execute, which it fails on the first armed
+  # attempt to drive swap_to_primary_mint's retry loop. Reuses the nutshell image
+  # (ships fastapi/uvicorn/httpx); script mounted, no extra build.
+  fault-proxy:
+    image: cashubtc/nutshell:latest
+    ports:
+      - "3340:3340"
+    environment:
+      - PROXY_TARGET=http://fault-mint:3338
+      - PROXY_PORT=3340
+    command: ["python", "/fault_proxy.py"]
+    volumes:
+      - ./tests/integration/fault_proxy.py:/fault_proxy.py:ro
+    depends_on:
+      fault-mint:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3340/__proxy__/stats').status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   # ── Routstr nodes ─────────────────────────────────────────────────────────
 
   node-a:
