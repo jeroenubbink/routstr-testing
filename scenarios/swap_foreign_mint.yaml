@@ -9,10 +9,8 @@ description: >
   are strictly less than the token's face value (melt fee + input fees), proving
   the swap actually ran rather than a trusted same-mint redeem.
 
-# The orchestrator provisions the compose stack for this scenario; a missing
-# service then fails the run instead of silently skipping (SERVICES_REQUIRED=1).
-# The node must trust ONLY the primary mint (CASHU_MINTS=http://primary-mint:3338)
-# for the swap to trigger rather than a same-mint redeem.
+# Orchestrator provisions the stack; a missing service then fails the run
+# instead of silently skipping (SERVICES_REQUIRED=1).
 services_required: true
 target_profile: local
 upstream_profile: mock

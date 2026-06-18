@@ -25,9 +25,9 @@ from tests.integration._swap_helpers import (
     BEARER_SATS,
     TOKEN_SATS,
     mint_token,
-    require_node,
     topup,
 )
+from tests.integration.targets import require_node
 
 pytestmark = pytest.mark.destructive
 
