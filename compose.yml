@@ -1,3 +1,10 @@
+# Pin the Cashu mint image by digest, not `:latest`. `:latest` is mutable: the
+# nutshell maintainers repoint it to new builds, so an unpinned tag silently
+# drifts and a run that's green today can fail on another machine tomorrow.
+# This digest is nutshell 0.20.1. All mints + the fault-proxy share it via the
+# anchor so they can never diverge. Bump = change this one line.
+x-nutshell-image: &nutshell-image cashubtc/nutshell@sha256:45f58c6150bdea0ad4968ef12fb670a0dae7fe5dcdaa1ed3607b935c902fb2ce
+
 services:
 
   # ── Infrastructure ────────────────────────────────────────────────────────
@@ -32,7 +39,7 @@ services:
   # swapped to a node's "primary" mint, exercising swap_to_primary_mint.
   # MINT_PRIVATE_KEY is fixed per-mint so keysets stay stable across restarts.
   foreign-mint:
-    image: cashubtc/nutshell:latest
+    image: *nutshell-image
     ports:
       - "3338:3338"
     environment:
@@ -40,6 +47,9 @@ services:
       - MINT_LISTEN_HOST=0.0.0.0
       - MINT_LISTEN_PORT=3338
       - MINT_PRIVATE_KEY=routstr-testing-foreign-mint-fixed-key
+      # nutshell >=0.18.2 defaults input_fee_ppk to 100; pin it to 0 so test
+      # mints charge no NUT-02 input fee and credited amounts are deterministic.
+      - MINT_INPUT_FEE_PPK=0
     command: ["python", "-m", "cashu.mint"]
     restart: unless-stopped
     healthcheck:
@@ -49,7 +59,7 @@ services:
       retries: 12
 
   primary-mint:
-    image: cashubtc/nutshell:latest
+    image: *nutshell-image
     ports:
       - "3339:3338"
     environment:
@@ -57,6 +67,9 @@ services:
       - MINT_LISTEN_HOST=0.0.0.0
       - MINT_LISTEN_PORT=3338
       - MINT_PRIVATE_KEY=routstr-testing-primary-mint-fixed-key
+      # Zero input fee so a trusted same-mint redeem credits the full face value
+      # (the swap negative control's baseline). See foreign-mint above.
+      - MINT_INPUT_FEE_PPK=0
     command: ["python", "-m", "cashu.mint"]
     restart: unless-stopped
     healthcheck:
@@ -71,7 +84,7 @@ services:
   # Phase 1's foreign-mint proofs ("outputs already signed" / code 11003) when
   # both phases run against the same node.
   fault-mint:
-    image: cashubtc/nutshell:latest
+    image: *nutshell-image
     ports:
       - "3341:3338"
     environment:
@@ -79,6 +92,9 @@ services:
       - MINT_LISTEN_HOST=0.0.0.0
       - MINT_LISTEN_PORT=3338
       - MINT_PRIVATE_KEY=routstr-testing-fault-mint-fixed-key
+      # Zero input fee — keep the Phase 2 retry shortfall attributable to the
+      # melt fee alone, not an incidental input fee. See foreign-mint above.
+      - MINT_INPUT_FEE_PPK=0
     command: ["python", "-m", "cashu.mint"]
     restart: unless-stopped
     healthcheck:
@@ -92,7 +108,7 @@ services:
   # attempt to drive swap_to_primary_mint's retry loop. Reuses the nutshell image
   # (ships fastapi/uvicorn/httpx); script mounted, no extra build.
   fault-proxy:
-    image: cashubtc/nutshell:latest
+    image: *nutshell-image
     ports:
       - "3340:3340"
     environment:
