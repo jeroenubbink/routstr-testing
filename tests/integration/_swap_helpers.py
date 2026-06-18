@@ -54,6 +54,28 @@ asyncio.run(main())
 """
 
 
+def _stack_required() -> bool:
+    """True when the orchestrator provisioned the stack (services_required).
+
+    In that case a missing service is a real failure to surface, not a reason
+    to skip — see _unavailable().
+    """
+    return os.environ.get("SERVICES_REQUIRED") == "1"
+
+
+def _unavailable(reason: str) -> "pytest.fail | pytest.skip":
+    """Fail when the stack was provisioned for us; skip when running ad hoc.
+
+    Under the orchestrator (SERVICES_REQUIRED=1) the stack is guaranteed live,
+    so a missing node/mint means the test couldn't exercise what it claims —
+    that must be a red failure, never a silent green skip. Run directly without
+    `make up` and it still skips so a bare `pytest` doesn't error out.
+    """
+    if _stack_required():
+        pytest.fail(f"{reason} (orchestrator provisioned the stack — this is a real failure)")
+    pytest.skip(reason)
+
+
 def mint_token(mint_internal_url: str, amount: int) -> str:
     """Mint `amount` sat at `mint_internal_url` and return the serialized token."""
     try:
@@ -70,13 +92,14 @@ def mint_token(mint_internal_url: str, amount: int) -> str:
             timeout=60,
         )
     except (FileNotFoundError, subprocess.SubprocessError) as exc:
-        pytest.skip(f"cannot mint test token (docker/{NODE_CONTAINER} unavailable): {exc}")
+        _unavailable(f"cannot mint test token (docker/{NODE_CONTAINER} unavailable): {exc}")
     if r.returncode != 0:
-        pytest.skip(f"mint helper failed (is {NODE_CONTAINER} up?): {r.stderr[-500:]}")
+        _unavailable(f"mint helper failed (is {NODE_CONTAINER} up?): {r.stderr[-500:]}")
     for line in r.stdout.splitlines():
         if line.startswith("TOKEN:"):
             return line[len("TOKEN:"):].strip()
-    pytest.skip(f"no token in mint output: {r.stdout[-300:]}")
+    _unavailable(f"no token in mint output: {r.stdout[-300:]}")
+    raise AssertionError("unreachable")  # _unavailable always raises
 
 
 def topup(cashu_token: str, bearer: str) -> httpx.Response:
@@ -89,9 +112,13 @@ def topup(cashu_token: str, bearer: str) -> httpx.Response:
 
 
 def require_node() -> None:
-    """Skip if the node isn't reachable (run `make up`)."""
+    """Ensure the node is reachable.
+
+    Under the orchestrator this is a hard failure (the stack was provisioned);
+    run ad hoc without `make up` it skips. See _unavailable().
+    """
     try:
         if httpx.get(f"{NODE}/v1/info", timeout=5).status_code >= 500:
-            pytest.skip(f"node not reachable at {NODE}; run `make up`")
+            _unavailable(f"node not reachable at {NODE}; run `make up`")
     except httpx.HTTPError:
-        pytest.skip(f"node not reachable at {NODE}; run `make up`")
+        _unavailable(f"node not reachable at {NODE}; run `make up`")

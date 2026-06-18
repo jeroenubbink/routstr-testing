@@ -11,9 +11,11 @@ description: >
   the swap and the topup returns 400. Uses local nutshell FakeWallet mints — real
   Cashu crypto, zero real sats.
 
-# Stack is brought up out-of-band (`make up`); the orchestrator only runs pytest
-# against it. The node must trust ONLY the primary mint for the swap to trigger.
-services_required: false
+# The orchestrator provisions the compose stack for this scenario; a missing
+# service then fails the run instead of silently skipping (SERVICES_REQUIRED=1).
+# The node must trust ONLY the primary mint (CASHU_MINTS=http://primary-mint:3338)
+# for the swap to trigger rather than a same-mint redeem.
+services_required: true
 target_profile: local
 upstream_profile: mock
 
