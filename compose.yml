@@ -144,7 +144,12 @@ services:
       - UPSTREAM_BASE_URL=${UPSTREAM_BASE_URL:-http://mock-openai:3000}
       - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-test-key}
       - MODELS_PATH=${UPSTREAM_MODELS_PATH:-models.json}
-      - CASHU_MINTS=${CASHU_MINTS:-https://testnut.cashu.space}
+      # Trust ONLY the in-stack primary mint by default. This is a hermetic
+      # local topology: primary-mint/foreign-mint are defined right here, so an
+      # external testnut default was a footgun — it let the node trust the wrong
+      # mint and made the foreign-mint swap collapse into a same-mint redeem.
+      # Override with CASHU_MINTS=... for scenarios that need a different mint.
+      - CASHU_MINTS=${CASHU_MINTS:-http://primary-mint:3338}
       # OpenRouter upstream — node auto-seeds an openrouter provider row when
       # OPENROUTER_API_KEY is present at startup (default provider_fee 1.01).
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
@@ -194,7 +199,8 @@ services:
       - UPSTREAM_BASE_URL=${UPSTREAM_BASE_URL:-http://mock-openai:3000}
       - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-test-key}
       - MODELS_PATH=${UPSTREAM_MODELS_PATH:-models.json}
-      - CASHU_MINTS=${CASHU_MINTS:-https://testnut.cashu.space}
+      # Trust ONLY the in-stack primary mint by default (see node-a for why).
+      - CASHU_MINTS=${CASHU_MINTS:-http://primary-mint:3338}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_REFERER=${OPENROUTER_REFERER:-https://routstr-testing.local}
       - ADMIN_PASSWORD=${NODE_B_ADMIN_PASSWORD:-test-admin-pw}
