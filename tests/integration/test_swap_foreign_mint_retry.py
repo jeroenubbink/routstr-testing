@@ -35,7 +35,7 @@ from tests.integration._swap_helpers import (
     mint_token,
     topup,
 )
-from tests.integration.targets import require_node
+from tests.integration.targets import require_node, unavailable
 
 pytestmark = pytest.mark.destructive
 
@@ -48,9 +48,9 @@ def _require_stack() -> None:
     require_node()
     try:
         if httpx.get(f"{PROXY_CTL}/__proxy__/stats", timeout=5).status_code != 200:
-            pytest.skip(f"fault-proxy not reachable at {PROXY_CTL}; run `make up`")
+            unavailable(f"fault-proxy not reachable at {PROXY_CTL}; run `make up`")
     except httpx.HTTPError:
-        pytest.skip(f"fault-proxy not reachable at {PROXY_CTL}; run `make up`")
+        unavailable(f"fault-proxy not reachable at {PROXY_CTL}; run `make up`")
 
 
 def test_swap_retries_after_melt_failure_and_credits() -> None:

@@ -16,6 +16,7 @@ changing the test bodies — they call these resolvers instead of hardcoding URL
 from __future__ import annotations
 
 import os
+from typing import NoReturn
 from urllib.parse import urlparse
 
 import httpx
@@ -109,7 +110,7 @@ def stack_required() -> bool:
     return os.environ.get("SERVICES_REQUIRED") == "1"
 
 
-def unavailable(reason: str) -> "pytest.fail | pytest.skip":
+def unavailable(reason: str) -> NoReturn:
     """Fail when the stack was provisioned for us; skip when running ad hoc.
 
     Under the orchestrator (SERVICES_REQUIRED=1) the stack is guaranteed live,

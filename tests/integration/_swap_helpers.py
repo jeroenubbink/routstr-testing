@@ -77,7 +77,6 @@ def mint_token(mint_internal_url: str, amount: int) -> str:
         if line.startswith("TOKEN:"):
             return line[len("TOKEN:"):].strip()
     unavailable(f"no token in mint output: {r.stdout[-300:]}")
-    raise AssertionError("unreachable")  # unavailable always raises
 
 
 def topup(cashu_token: str, bearer: str) -> httpx.Response:
