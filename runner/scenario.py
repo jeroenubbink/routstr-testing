@@ -85,6 +85,11 @@ class Scenario:
             "SCENARIO_EXPECTED_COST_SATS": str(self.expected_cost_sats),
             "TARGET_PROFILE": self.target_profile,
             "UPSTREAM_PROFILE": self.upstream_profile,
+            # When the orchestrator owns bring-up, the stack is guaranteed live
+            # by the time pytest runs. Tests use this to turn "service not
+            # reachable" into a hard failure instead of a silent skip, so a
+            # provisioned run can never report a vacuous green.
+            "SERVICES_REQUIRED": "1" if self.services_required else "0",
         }
         for key, value in self.parameters.items():
             out[f"SCENARIO_PARAM_{key.upper()}"] = str(value)

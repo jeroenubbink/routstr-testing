@@ -16,9 +16,11 @@ changing the test bodies — they call these resolvers instead of hardcoding URL
 from __future__ import annotations
 
 import os
+from typing import NoReturn
 from urllib.parse import urlparse
 
 import httpx
+import pytest
 
 ADMIN_PASSWORD = os.environ.get("NODE_A_ADMIN_PASSWORD", "test-admin-pw")
 
@@ -97,3 +99,31 @@ def node_reachable(i: int = 0) -> bool:
         return httpx.get(f"{node_api_url(i)}/v1/info", timeout=5).status_code < 500
     except httpx.HTTPError:
         return False
+
+
+def stack_required() -> bool:
+    """True when the orchestrator provisioned the stack (services_required).
+
+    In that case a missing service is a real failure to surface, not a reason
+    to skip — see unavailable().
+    """
+    return os.environ.get("SERVICES_REQUIRED") == "1"
+
+
+def unavailable(reason: str) -> NoReturn:
+    """Fail when the stack was provisioned for us; skip when running ad hoc.
+
+    Under the orchestrator (SERVICES_REQUIRED=1) the stack is guaranteed live,
+    so a missing node/mint means the test couldn't exercise what it claims —
+    that must be a red failure, never a silent green skip. Run directly without
+    `make up` and it still skips so a bare `pytest` doesn't error out.
+    """
+    if stack_required():
+        pytest.fail(f"{reason} (orchestrator provisioned the stack — this is a real failure)")
+    pytest.skip(reason)
+
+
+def require_node(i: int = 0) -> None:
+    """Fail/skip the caller unless node i is reachable. See unavailable()."""
+    if not node_reachable(i):
+        unavailable(f"node not reachable at {node_api_url(i)}; run `make up`")
