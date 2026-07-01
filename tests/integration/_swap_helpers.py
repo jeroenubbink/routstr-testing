@@ -100,7 +100,7 @@ def mint_token(mint_internal_url: str, amount: int) -> str:
     stdout = _run_mint(mint_internal_url, amount)
     token = _parse(stdout, "TOKEN:")
     if token is None:
-        unavailable(f"no token in mint output: {stdout[-300:]}")
+        unavailable("mint output missing TOKEN: line")
     return token
 
 
@@ -115,7 +115,12 @@ def mint_token_with_fee(mint_internal_url: str, amount: int) -> tuple[str, int]:
     token = _parse(stdout, "TOKEN:")
     fee = _parse(stdout, "FEE:")
     if token is None or fee is None:
-        unavailable(f"no token/fee in mint output: {stdout[-300:]}")
+        # Report which prefix was missing rather than echoing stdout, which
+        # ends in the TOKEN: line and would tail the serialized token.
+        missing = " and ".join(
+            p for p, v in (("TOKEN:", token), ("FEE:", fee)) if v is None
+        )
+        unavailable(f"mint output missing {missing} line(s)")
     return token, int(fee)
 
 

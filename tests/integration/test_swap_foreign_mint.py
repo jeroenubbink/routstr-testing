@@ -8,9 +8,10 @@ through `POST /v1/wallet/topup`, with two local nutshell FakeWallet mints
 (`primary-mint` trusted, `foreign-mint` untrusted) so it runs with real Cashu
 crypto and zero real sats.
 
-Run config (set by the swap_foreign_mint scenario): the node must trust ONLY
-the primary mint, i.e. `CASHU_MINTS=http://primary-mint:3338`, so a
-`foreign-mint` token triggers the swap instead of a plain same-mint redeem.
+Run config: the node trusts the in-stack mints (compose defaults
+`CASHU_MINTS=http://primary-mint:3338,http://fee-mint:3338`) but NOT
+`foreign-mint`, so a `foreign-mint` token is untrusted and triggers the swap
+instead of a plain same-mint redeem.
 
 Marked `destructive` (creates a key + credits balance) so it auto-skips under
 TARGET_PROFILE=remote.
